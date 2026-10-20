@@ -1,0 +1,14 @@
+# Environment variables and secrets
+server/.env
+client/.env
+client/.env.local
+
+# Dependencies
+server/node_modules/
+client/node_modules/
+
+# Build files
+client/dist/
+
+# Windows files
+desktop.ini
