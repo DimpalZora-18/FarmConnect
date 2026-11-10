@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 const authMiddleware = (req, res, next) => {
 
@@ -7,7 +8,7 @@ const authMiddleware = (req, res, next) => {
     next();
 };
 
-const protect = (req, res, next) => {
+const protect = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
 
@@ -30,17 +31,56 @@ const protect = (req, res, next) => {
             process.env.JWT_SECRET
         );
 
-        req.user = decoded;
+        if(decoded.type !== "access") {
+            return res.status(401).json({
+                message: "Invalid token type."
+            });
+        }
+
+        const user = await User.findById(decoded.userId).select("_id name email role status");
+
+        if(!user || user.status !== "active") {
+            return res.status(401).json({
+                message: "User not found or account is inactive."
+            });
+        }
+
+        req.user = user;
 
         next();
     } catch (error) {
-        return res.status(401).json({
-            message: "Not authorized. Invalid or expired token.",
+        if(
+            error.name === "JsonWebTokenError" ||
+            error.name === "TokenExpiredError" ||
+            error.name === "NotBeforeError"
+        ) {
+            return res.status(401).json({
+                message: "Not authorized. Invalid or expired token.",
+            });
+        }
+
+        console.error("Authentication middleware error:", error);
+
+        return res.status(500).json({
+            message: "Internal server error",
         });
     }   
 };
 
+const authorize = (...roles) => {
+    return (req,res,next) =>{
+        if(!roles.includes(req.user.role)) {
+            return res.status(403).json({
+                message: "You are not allowed to perform this action."
+            });
+        }
+
+        next();
+    }
+}
+
 module.exports = {
     protect,
     authMiddleware,
+    authorize
 };

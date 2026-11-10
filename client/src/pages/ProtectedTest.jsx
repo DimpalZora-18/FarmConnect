@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiFetch } from "../utils/api";
 
 function ProtectedTest() {
     const [message, setMessage] = useState("");
@@ -6,13 +7,10 @@ function ProtectedTest() {
     const testProtectedRoute = async () => {
         const token = localStorage.getItem("token");
 
-        const response = await fetch(
-            "http://localhost:5000/api/test/protected",
+        const response = await apiFetch(
+            "/api/test/protected",
             {
                 method: "GET",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             }
         );
 

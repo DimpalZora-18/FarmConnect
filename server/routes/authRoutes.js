@@ -6,12 +6,20 @@ const router = express.Router();
 const { 
     registerUser,
     loginUser,
-    googleLogin
+    googleLogin,
+    refreshAccessToken,
+    logoutUser
 } = require("../controllers/authController");
+
+
 
 router.post("/register", registerUser);
 
 router.post("/login",loginUser);
+
+router.post("/logout",logoutUser);
+
+router.post("/refresh", refreshAccessToken);
 
 router.post("/google",googleLogin);
 

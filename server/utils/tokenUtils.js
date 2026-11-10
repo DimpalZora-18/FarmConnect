@@ -4,7 +4,8 @@ const generateAccessToken = (user) =>{
     return jwt.sign(
         {
             userId: user._id,
-            role: user.role
+            role: user.role,
+            type: "access"
         },
         process.env.JWT_SECRET,
         {
@@ -13,11 +14,13 @@ const generateAccessToken = (user) =>{
     );
 }
 
-const generateRefreshToken = (user) =>{
+const generateRefreshToken = (user,sessionId) =>{
     return jwt.sign(
         {
             userId: user._id,
-            role: user.role
+            role: user.role,
+            type: "refresh",
+            sessionId,
         },
         process.env.REFRESH_TOKEN_SECRET,
         {
@@ -29,4 +32,4 @@ const generateRefreshToken = (user) =>{
 module.exports = {
     generateAccessToken,
     generateRefreshToken
-}
+};

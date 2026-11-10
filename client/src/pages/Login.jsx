@@ -15,6 +15,7 @@ function Login() {
             "http://localhost:5000/api/auth/login",
             {
                 method: "POST",
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -47,6 +48,7 @@ function Login() {
                     headers: {
                         "Content-Type" : "application/json"
                     },
+                    credentials: "include",
                     body: JSON.stringify({
                         credential:credentialResponse.credential, 
                     }),
@@ -59,7 +61,7 @@ function Login() {
                 throw new Error(data.message || "Google login failed");
             }
 
-            localStorage.setItem("token",data.token);
+            localStorage.setItem("token",data.accessToken);
             setUser(data.user);
 
             console.log("Google login successful:", data.user);
