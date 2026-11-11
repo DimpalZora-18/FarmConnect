@@ -96,6 +96,67 @@ const getSingleProduct = async(req,res) =>{
     }
 }
 
+const updateProduct = async(req,res) =>{
+    try{
+        //Find product
+        const product = await Product.findById(req.params.id);
+
+        //check product existence
+        if(!product){
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        //Check ownership
+        if(product.seller.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: "Ypu are not authorized to update this product"
+            });
+        }
+
+        //Allo only specific fields
+        const allowedFields = [
+            "name",
+            "description",
+            "price",
+            "stock",
+            "category"
+        ];
+
+        const updateData = {};
+
+        allowedFields.forEach((field) => {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        });
+
+        //update product
+        const updatedProduct = await Product.findByIdAndUpdate(
+            req.params.id,
+            updateData,
+            {
+                new: true,
+                runValidator: true
+            }
+        );
+        return res.status(200).json({
+            success: true,
+            message: "Product updated successfully",
+            product: updatedProduct
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update product"
+        });
+    }
+}
+
 module.exports = {
     createProduct,
     getAllProducts,
