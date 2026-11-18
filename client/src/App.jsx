@@ -7,6 +7,7 @@ import Navbar from "./components/Navbar";
 import ProtectedTest from "./pages/ProtectedTest";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleBasedRoute from "./components/RoleBasedRoute";
+import Products from "./pages/Products";
 
 function App(){
   return(
@@ -23,6 +24,8 @@ function App(){
                    </RoleBasedRoute>
               } 
         />
+        <Route path="/products" element={<Products/>} />
+        
         {/* <Route
             path="/admin"
             element={

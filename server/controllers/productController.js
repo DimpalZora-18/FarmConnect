@@ -4,8 +4,10 @@ const cloudinary = require("../config/cloudinary");
 const mongoose = require("mongoose");
 
 const createProduct = async (req,res) => {
+    let uploadedImage = null;
 
     try{
+
     const { name, price, description, stock, category} = req.body;
 
     const image = req.file;
@@ -18,11 +20,11 @@ const createProduct = async (req,res) => {
 
     const seller = req.user._id;
 
-    const result = await uploadToCloudinary(image.buffer);
+    uploadedImage = await uploadToCloudinary(image.buffer);
 
-    const imageUrl = result.secure_url;
+    const imageUrl = uploadedImage.secure_url;
 
-    const imagePublicId  = result.public_id;
+    const imagePublicId  = uploadedImage.public_id;
 
     const product = await Product.create({
         name,
@@ -43,6 +45,14 @@ const createProduct = async (req,res) => {
     });
 
     }catch (error) {
+
+        if (uploadedImage) {
+            try{
+                await cloudinary.uploader.destroy(uploadedImage.public_id);
+            } catch (cleanupError) {
+                console.error("Failed to clean up uploaded image:",cleanupError);
+            }
+        }
         return res.status(500).json({
             message: "Failed to create product",
             error: error.message
@@ -53,14 +63,178 @@ const createProduct = async (req,res) => {
 const getAllProducts = async(req,res) => {
 
     try {
-        const products = await Product.find()
-        .populate("category")
+
+        const page = req.query.page === undefined
+            ? 1
+            : Number(req.query.page);
+
+        const limit = req.query.limit === undefined
+            ? 10
+            : Number(req.query.limit);
+
+        if(!Number.isInteger(page) || page <= 0 ||
+           !Number.isInteger(limit) || limit <= 0 ||
+           limit > 100
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid page or limit"
+            });
+        }
+
+        const skip = (page - 1) * limit;
+
+        const filter = {};
+        const search = req.query.search?.trim();
+
+        if(search && search.length > 100){
+            return res.status(400).json({
+                success: false,
+                message: "Search term cannot exceed 100 characters"
+            });
+        }
+        
+        if(search) {
+            const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+            filter.name = {
+                $regex: escapedSearch,
+                $options: "i"
+            };
+        }
+
+        const category = req.query.category;
+
+        if (category) {
+
+            if(!mongoose.Types.ObjectId.isValid(category)){
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid category ID"
+                });
+            }
+
+            filter.category = category;
+
+        }
+
+        if (
+            (req.query.minPrice !== undefined && req.query.minPrice.trim() === "") ||
+            (req.query.maxPrice !== undefined && req.query.maxPrice.trim() === "")
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Price cannot be empty"
+            });
+        }
+
+        const minPrice = req.query.minPrice !== undefined
+            ? Number(req.query.minPrice)
+            :undefined;
+
+        const maxPrice = req.query.maxPrice !== undefined
+            ? Number(req.query.maxPrice)
+            : undefined;
+
+        if (
+            (minPrice !== undefined && (!Number.isFinite(minPrice) || minPrice < 0)) || 
+            (maxPrice !== undefined && (!Number.isFinite(maxPrice) || maxPrice < 0)) ||
+            (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice)
+        ){
+            return res.status(400).json({
+                success: false,
+                message: "Invalid price range"
+            });
+        }
+        
+        if (minPrice !== undefined || maxPrice !== undefined) {
+            filter.price = {};
+
+            if (minPrice !== undefined) {
+                filter.price.$gte = minPrice;
+            }
+
+            if (maxPrice !== undefined) {
+                filter.price.$lte = maxPrice;
+            }
+        }
+
+        const sort = req.query.sort;
+
+        let sortOptions = { createdAt: -1 };
+
+        const allowedSortOptions = [
+            "price_asc",
+            "price_desc",
+            "newest",
+            "oldest"
+        ];
+
+        if(sort && !allowedSortOptions.includes(sort)){
+            return res.status(400).json({
+                success: false,
+                message: "Invalid sorting options"
+            });
+        }
+
+        if (sort === "price_asc") {
+            sortOptions = { price: 1 };
+        } else if (sort === "price_desc") {
+            sortOptions = { price: -1 };
+        } else if (sort === "newest") {
+            sortOptions = { createdAt: -1 };
+        } else if (sort === "oldest") {
+            sortOptions = { createdAt: 1 };
+        }
+
+        const sellerId = req.query.sellerId;
+
+        if(sellerId) {
+            if(!mongoose.Types.ObjectId.isValid(sellerId)){
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid seller Id"
+                });
+            }
+
+            filter.seller = sellerId;
+        }
+
+        const availability = req.query.availability;
+
+        const allowedAvailability = ["in_stock", "out_of_stock"];
+
+        if (availability && !allowedAvailability.includes(availability)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid availability option"
+            });
+        }
+
+        if (availability === "in_stock") {
+            filter.stock = { $gt: 0 };
+        } else if (availability === "out_of_stock") {
+            filter.stock = { $eq: 0 };
+        }
+
+        const products = await Product.find(filter)
+        .populate("category","name")
         .populate("seller","name")
-        .sort({createdAt: -1});
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit);
+
+        const totalProducts = await Product.countDocuments(filter);
+        const totalPages = Math.ceil(totalProducts/limit);
 
         return res.status(200).json({
             success : true,
-            counts: products.length,
+            pagination: {
+                totalProducts,
+                totalPages,
+                currentPage: page,
+                limit
+            },
             products
         });
     } catch(error){
@@ -73,6 +247,13 @@ const getAllProducts = async(req,res) => {
 
 const getSingleProduct = async(req,res) =>{
     try{
+
+        if(!mongoose.Types.ObjectId.isValid(req.params.id)){
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product ID"
+            });
+        }
         const product = await Product.findById(req.params.id)
             .populate("category","name")
             .populate("seller","name");
@@ -249,13 +430,13 @@ const deleteProduct = async(req,res) => {
             });
         }
 
-        if(deletedProduct){
+    
             try{
                 await cloudinary.uploader.destroy(productImageId);
             }catch(error){
                 console.error("error during cloudinary upload",error);
             }
-        }
+        
 
         return res.status(200).json({
             success: true,
